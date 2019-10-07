@@ -1,0 +1,173 @@
+
+/* Advance velocity by half a timestep */
+static inline void bodyAdvanceVel(Body* p, const mwvector a, const real dtHalf,float ax, float ay, float az)
+{
+    mwvector dv;
+    dv = mw_mulvs(a, dtHalf);   /* get velocity increment */
+    dv.x += ax*dtHalf, dv.y += ay*dtHalf, dv.z += az*dtHalf;
+    mw_incaddv(Vel(p), dv);     /* advance v by 1/2 step */
+}
+
+/* Advance body position by 1 timestep */
+static inline void bodyAdvancePos(Body* p, const real dt,float ax, float ay, float az)
+{
+    mwvector dr;
+    dr = mw_mulvs(Vel(p), dt);  /* get position increment */
+    dr.x += 0.5*ax*dt*dt, dr.y += 0.5*ay*dt*dt, dr.z += 0.5*az*dt*dt;
+    mw_incaddv(Pos(p), dr);     /* advance r by 1 step */
+}
+
+static inline void advancePosVel(NBodyState* st, const int nbody, const real dt,float ax, float ay, float az)
+{
+    int i;
+    real dtHalf = 0.5 * dt;
+    Body* bodies = mw_assume_aligned(st->bodytab, 16);
+    const mwvector* accs = mw_assume_aligned(st->acctab, 16);
+
+  #ifdef _OPENMP
+    #pragma omp parallel for private(i) shared(bodies, accs) schedule(dynamic, 4096 / sizeof(accs[0]))
+  #endif
+    for (i = 0; i < nbody; ++i)
+    {
+        bodyAdvanceVel(&bodies[i], accs[i], dtHalf,ax,ay,az);
+        bodyAdvancePos(&bodies[i], dt,ax,ay,az);
+    }
+
+}
+
+static inline void advanceVelocities(NBodyState* st, const int nbody, const real dt,float ax, float ay, float az)
+{
+    int i;
+    real dtHalf = 0.5 * dt;
+    Body* bodies = mw_assume_aligned(st->bodytab, 16);
+    const mwvector* accs = mw_assume_aligned(st->acctab, 16);
+
+  #ifdef _OPENMP
+    #pragma omp parallel for private(i) schedule(dynamic, 4096 / sizeof(accs[0]))
+  #endif
+    for (i = 0; i < nbody; ++i)      /* loop over all bodies */
+    {
+        bodyAdvanceVel(&bodies[i], accs[i], dtHalf,ax,ay,az);
+    }
+}
+
+
+ 0,        1,    126.115744506296281,    632.315134501063312,   -340.855322138049246,     78.024882796241130,    -27.803942782635627,    730.747434393997196,    -23.430210048447258,   -126.402474711827821,    120.185146871193339, 449865.888230730080977,   -169.736216616501792
+       1,        1,      9.594132490705270,      1.109418089942171,     -0.636309531914413,      3.608073788699865,     -2.067154931911219,     17.640555445313701,      1.913518479809617,      0.413458278966827,     -1.237636174247934,     96.000000000000000,      1.979127899586423
+
+
+
+
+
+
+
+
+
+/* stepSystem: advance N-body system one time-step. */
+NBodyStatus nbStepSystemPlain(const NBodyCtx* ctx, NBodyState* st,float ax,float ay,float az,float ax1,float ay1,float az1)
+{
+    NBodyStatus rc;
+
+    const real dt = ctx->timestep;
+
+    advancePosVel(st, st->nbody, dt, ax,ay,az);
+
+    rc = nbGravMap(ctx, st);
+    advanceVelocities(st, st->nbody, dt,ax1,ay1,az1);
+
+    st->step++;
+    #ifdef NBODY_BLENDER_OUTPUT
+        blenderPrintBodies(st, ctx);
+        printf("Frame: %d\n", (int)(st->step));
+    #endif
+
+    return rc;
+}
+
+NBodyStatus nbRunSystemPlain(const NBodyCtx* ctx, NBodyState* st, const NBodyFlags* nbf)
+{
+    float ax,ay,az,ax1,ay1,az1;
+
+    FILE *fptr;
+    if (ctx->shift){
+	    if ((fptr = fopen("shift.txt","r")) == NULL){
+	        printf("Error! opening file");
+
+	        // Program exits if the file pointer returns NULL.
+	        exit(1);
+	    }
+	}
+
+    NBodyStatus rc = NBODY_SUCCESS;
+    rc |= nbGravMap(ctx, st); /* Calculate accelerations for 1st step this episode */
+    if (nbStatusIsFatal(rc))
+        return rc;
+
+    #ifdef NBODY_BLENDER_OUTPUT
+        if(mkdir("./frames", S_IRWXU | S_IRWXG) < 0)
+        {
+          return NBODY_ERROR;
+        }
+        deleteOldFiles(st);
+        mwvector startCmPos;
+        mwvector perpendicularCmPos;
+        mwvector nextCmPos;
+        nbFindCenterOfMass(&startCmPos, st);
+        perpendicularCmPos=startCmPos;
+    #endif
+
+    real curStep = st->step;
+    real Nstep = ctx->nStep;
+
+    st->bestLikelihood = DEFAULT_WORST_CASE; //initializing it.
+
+    while (st->step < ctx->nStep)
+    {
+    	if(ctx->shift){
+        	fscanf(fptr,"%f %f %f %f %f %f", &ax, &ay, &az, &ax1, &ay1, &az1);}
+        else {ax = 0, ay = 0, az = 0, ax1 = 0, ay1 = 0, az1 = 0;}
+
+        #ifdef NBODY_BLENDER_OUTPUT
+            nbFindCenterOfMass(&nextCmPos, st);
+            blenderPossiblyChangePerpendicularCmPos(&nextCmPos,&perpendicularCmPos,&startCmPos);
+        #endif
+
+        /* if one needs to add run time options, here is the place to do it
+         * this will not run on client side. and provides a good environment
+         * to add options without bogging down the client side application
+         */
+        #ifdef NBODY_DEV_OPTIONS
+            if(ctx->MultiOutput)
+            {
+                dev_write_outputs(ctx, st, nbf, ctx->OutputFreq);
+            }
+
+        #endif
+        rc |= nbStepSystemPlain(ctx, st, ax,ay,az,ax1,ay1,az1);
+        curStep = st->step;
+
+        if(curStep / Nstep >= ctx->BestLikeStart && ctx->useBestLike)
+        {
+            get_likelihood(ctx, st, nbf);
+        }
+
+        if (nbStatusIsFatal(rc))   /* advance N-body system */
+            return rc;
+
+        rc |= nbCheckpoint(ctx, st);
+        if (nbStatusIsFatal(rc))
+            return rc;
+        /* We report the progress at step + 1. 0 is the original
+           center of mass. */
+        nbReportProgress(ctx, st);
+        nbUpdateDisplayedBodies(ctx, st);
+    }
+
+    #ifdef NBODY_BLENDER_OUTPUT
+        blenderPrintMisc(st, ctx, startCmPos, perpendicularCmPos);
+    #endif
+
+    return nbWriteFinalCheckpoint(ctx, st);
+}
+
+

@@ -1,1 +1,0 @@
-//File for Dynamical Friction and potentials

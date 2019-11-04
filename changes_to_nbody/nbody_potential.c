@@ -130,15 +130,6 @@ static inline real ZSechIntegrand (real k, real R, real Rd, real z, real zd)
 }
 
 /**********************************************************************************************************************************************************************************************/
-
-static inline mwvector pointAccel(mwvector pos, mwvector pos1, real mass)
-{
-    const real tmp = mw_distv(pos, pos1);
-
-    return mw_mulvs(pos, mass / sqr(tem));
-}
-
-
 /*spherical bulge potentials*/
 
 static inline mwvector hernquistSphericalAccel(const Spherical* sph, mwvector pos, real r)
@@ -643,8 +634,14 @@ mwvector nbExtAcceleration(const Potential* pot, mwvector pos)
     return acc;
 }
 
-
-
+mwvector pointAccel(mwvector pos, mwvector pos1, real mass)
+{
+    mwvector v = mw_subv(pos1, pos);
+    real dist = mw_distv(pos, pos1);
+    real tmp = mass/cube(dist);
+    mw_incmulvs(v, tmp);
+    return v;
+}
 
 
 

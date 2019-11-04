@@ -27,7 +27,7 @@
 extern "C" {
 #endif
 
-NBodyStatus nbStepSystemPlain(const NBodyCtx* ctx, NBodyState* st,float ax, float ay, float az, float ax1, float ay1, float az1);
+NBodyStatus nbStepSystemPlain(const NBodyCtx* ctx, NBodyState* st, const mwvector acc_i, const mwvector acc_i1);
 NBodyStatus nbRunSystemPlain(const NBodyCtx* ctx, NBodyState* st, const NBodyFlags* nbf);
 
 #ifdef __cplusplus

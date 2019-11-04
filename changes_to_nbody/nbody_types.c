@@ -628,6 +628,6 @@ int equalNBodyCtx(const NBodyCtx* ctx1, const NBodyCtx* ctx2)
         && ctx1->checkpointT == ctx2->checkpointT
         && feqWithNan(ctx1->nStep, ctx2->nStep)
         && equalPotential(&ctx1->pot, &ctx2->pot)
-        && feqWithNan(ctx1->shift, ctx2->shift);
+        && feqWithNan(ctx1->LMC, ctx2->LMC);
 }
 

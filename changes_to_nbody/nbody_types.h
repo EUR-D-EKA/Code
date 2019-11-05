@@ -430,7 +430,7 @@ typedef struct MW_ALIGN_TYPE
     mwbool useQuad;           /* use quadrupole corrections */
     mwbool allowIncest;
     mwbool quietErrors;
-    mwbool shift;
+    mwbool LMC;
     
     real BestLikeStart;       /* after what portion of the sim should the calc start */
     real OutputFreq;          /* frequency of writing outputs */

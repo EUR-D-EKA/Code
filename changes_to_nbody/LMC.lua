@@ -176,16 +176,16 @@ function makeContext()
       VelCorrect    = Correction,
       MultiOutput   = useMultiOutputs,
       OutputFreq    = freqOfOutputs,
-      theta       = 1.0
---      LMC         = LMC_body
+      theta       = 1.0,
+      LMC         = LMC_body
    }
 end
 
 
 
 function makeBodies(ctx, potential)
-  local firstModel
-  local finalPosition, finalVelocity
+  local firstModel, LMCModel
+  local finalPosition, finalVelocity, LMCfinalPosition, LMCfinalVelocity
     if TooManyTimesteps == 1 then
         totalBodies = 1
     end
@@ -193,15 +193,27 @@ function makeBodies(ctx, potential)
     if(run_null_potential == true) then
         print("placing dwarf at origin")
         finalPosition, finalVelocity = Vector.create(0, 0, 0), Vector.create(0, 0, 0)
-        LMCfinalPosition,LMCfinalVelocity = Vector.create(0, 0, 0), Vector.create(0, 0, 0)
+        LMCfinalPosition, LMCfinalVelocity = Vector.create(0, 0, 0), Vector.create(0, 0, 0)
     else 
-        finalPosition, finalVelocity = reverseOrbit{
-            potential = potential,
-            position  = lbrToCartesian(ctx, Vector.create(orbit_parameter_l, orbit_parameter_b, orbit_parameter_r)),
-            velocity  = Vector.create(orbit_parameter_vx, orbit_parameter_vy, orbit_parameter_vz),
-            tstop     = revOrbTime,
-            dt        = ctx.timestep / 10.0
-            }
+    	if (LMC_body) then
+    		finalPosition, finalVelocity, LMCfinalPosition, LMCfinalVelocity = reverseOrbit_LMC{
+	            potential = potential,
+	            position  = lbrToCartesian(ctx, Vector.create(orbit_parameter_l, orbit_parameter_b, orbit_parameter_r)),
+	            velocity  = Vector.create(orbit_parameter_vx, orbit_parameter_vy, orbit_parameter_vz),
+	            LMCposition = Vector.create(-1.1, -41.1, -27.9),
+	            LMCvelocity = Vector.create(-57, -226, 221), 
+	            tstop     = revOrbTime,
+	            dt        = ctx.timestep / 10.0
+	            }
+	    else
+	        finalPosition, finalVelocity = reverseOrbit{
+	            potential = potential,
+	            position  = lbrToCartesian(ctx, Vector.create(orbit_parameter_l, orbit_parameter_b, orbit_parameter_r)),
+	            velocity  = Vector.create(orbit_parameter_vx, orbit_parameter_vy, orbit_parameter_vz),
+	            tstop     = revOrbTime,
+	            dt        = ctx.timestep / 10.0
+	            }
+         end
     end
     
     if(print_reverse_orbit == true) then
@@ -216,7 +228,6 @@ function makeBodies(ctx, potential)
         print('Printing reverse orbit')
     end
     
-
   	if(LMC_body) then
   		LMCModel = predefinedModels.plummer{
             nbody       = 1,
@@ -264,10 +275,10 @@ function makeBodies(ctx, potential)
         return firstModel, manualModel
     elseif(ModelComponents == 0 and manual_bodies) then
         return manualModel
-    elseif(ModelComponents > 0 and not manual_bodies) then
-        return firstModel
     elseif(ModelComponents > 0 and not manual_bodies and LMC_body) then
         return firstModel, LMCModel
+    elseif(ModelComponents > 0 and not manual_bodies) then
+        return firstModel
     else    
         print("Don't you want to simulate something?")
     end

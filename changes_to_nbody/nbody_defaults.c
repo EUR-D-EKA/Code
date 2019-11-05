@@ -60,7 +60,7 @@ const NBodyCtx defaultNBodyCtx =
     /* .nStep           */  0,
 
     /* .pot             */  EMPTY_POTENTIAL,
-    /* .shift           */  FALSE
+    /* .LMC             */  FALSE
 };
 
 const HistogramParams defaultHistogramParams =

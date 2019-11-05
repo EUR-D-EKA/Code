@@ -188,15 +188,14 @@ static int luaReverseOrbit(lua_State* luaSt)
     static Potential* pot = NULL;
     static const mwvector* pos = NULL;
     static const mwvector* vel = NULL;
-    static const mwbool* shift = FALSE;
+
     static const MWNamedArg argTable[] =
         {
-            { "potential", LUA_TUSERDATA, POTENTIAL_TYPE, TRUE, &pot   },
-            { "position",  LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &pos   },
-            { "velocity",  LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &vel   },
-            { "tstop",     LUA_TNUMBER,   NULL,           TRUE, &tstop },
-            { "dt",        LUA_TNUMBER,   NULL,           TRUE, &dt    },
-            { "LMC",       LUA_TBOOLEAN,  FALSE,          TRUE, &LMC },
+            { "potential",  LUA_TUSERDATA, POTENTIAL_TYPE, TRUE, &pot           },
+            { "position",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &pos           },
+            { "velocity",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &vel           },
+            { "tstop",      LUA_TNUMBER,   NULL,           TRUE, &tstop         },
+            { "dt",         LUA_TNUMBER,   NULL,           TRUE, &dt            },
             END_MW_NAMED_ARG
         };
 
@@ -229,6 +228,61 @@ static int luaReverseOrbit(lua_State* luaSt)
     return 2;
 }
 
+static int luaReverseOrbit_LMC(lua_State* luaSt)
+{
+    mwvector finalPos, finalVel, LMCfinalPos, LMCfinalVel;
+    static real dt = 0.0;
+    static real tstop = 0.0;
+    static Potential* pot = NULL;
+    static const mwvector* pos = NULL;
+    static const mwvector* vel = NULL;
+    static const mwvector* LMCpos = NULL;
+    static const mwvector* LMCvel = NULL;
+
+    static const MWNamedArg argTable[] =
+        {
+            { "potential",  LUA_TUSERDATA, POTENTIAL_TYPE, TRUE, &pot           },
+            { "position",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &pos           },
+            { "velocity",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &vel           },
+            { "LMCposition",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &LMCpos           },
+            { "LMCvelocity",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &LMCvel           },
+            { "tstop",      LUA_TNUMBER,   NULL,           TRUE, &tstop         },
+            { "dt",         LUA_TNUMBER,   NULL,           TRUE, &dt            },
+            END_MW_NAMED_ARG
+        };
+
+    switch (lua_gettop(luaSt))
+    {
+        case 1:
+            handleNamedArgumentTable(luaSt, argTable, 1);
+            break;
+
+        case 7:
+            pot = checkPotential(luaSt, 1);
+            pos = checkVector(luaSt, 2);
+            vel = checkVector(luaSt, 3);
+            LMCpos = checkVector(luaSt, 4);
+            LMCvel = checkVector(luaSt, 5);
+            tstop = luaL_checknumber(luaSt, 6);
+            dt = luaL_checknumber(luaSt, 7);
+            break;
+
+        default:
+            return luaL_argerror(luaSt, 1, "Expected 1 or 7 arguments");
+    }
+
+    /* Make sure precalculated constants ready for use */
+    if (checkPotentialConstants(pot))
+        luaL_error(luaSt, "Error with potential");
+
+    nbReverseOrbit_LMC(&finalPos, &finalVel, &LMCfinalPos, &LMCfinalVel, pot, *pos, *vel, *LMCpos, *LMCvel, tstop, dt);
+    pushVector(luaSt, finalPos);
+    pushVector(luaSt, finalVel);
+    pushVector(luaSt, LMCfinalPos);
+    pushVector(luaSt, LMCfinalVel);
+
+    return 4;
+}
 
 static int luaPrintReverseOrbit(lua_State* luaSt)
 {
@@ -239,17 +293,16 @@ static int luaPrintReverseOrbit(lua_State* luaSt)
     static Potential* pot = NULL;
     static const mwvector* pos = NULL;
     static const mwvector* vel = NULL;
-    static const mwbool* shift = FALSE;
+    //static mwbool SecondDisk = FALSE;
 
     static const MWNamedArg argTable[] =
         {
-            { "potential", LUA_TUSERDATA, POTENTIAL_TYPE, TRUE, &pot    },
-            { "position",  LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &pos    },
-            { "velocity",  LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &vel    },
-            { "tstop",     LUA_TNUMBER,   NULL,           TRUE, &tstop  },
-            { "tstopf",    LUA_TNUMBER,   NULL,           TRUE, &tstopf },
-            { "dt",        LUA_TNUMBER,   NULL,           TRUE, &dt     },
-            { "shift",     LUA_TBOOLEAN,  FALSE,          TRUE, &shift},
+            { "potential",  LUA_TUSERDATA, POTENTIAL_TYPE, TRUE, &pot           },
+            { "position",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &pos           },
+            { "velocity",   LUA_TUSERDATA, MWVECTOR_TYPE,  TRUE, &vel           },
+            { "tstop",      LUA_TNUMBER,   NULL,           TRUE, &tstop         },
+            { "tstopf",     LUA_TNUMBER,   NULL,           TRUE, &tstopf        },
+            { "dt",         LUA_TNUMBER,   NULL,           TRUE, &dt            },
             END_MW_NAMED_ARG
         };
 
@@ -287,6 +340,7 @@ void registerModelFunctions(lua_State* luaSt)
 {
     lua_register(luaSt, "plummerTimestepIntegral", luaPlummerTimestepIntegral);
     lua_register(luaSt, "reverseOrbit", luaReverseOrbit);
+    lua_register(luaSt, "reverseOrbit_LMC", luaReverseOrbit_LMC);
     lua_register(luaSt, "PrintReverseOrbit", luaPrintReverseOrbit);
     lua_register(luaSt, "calculateEps2", luaCalculateEps2);
     lua_register(luaSt, "calculateTimestep", luaCalculateTimestep);

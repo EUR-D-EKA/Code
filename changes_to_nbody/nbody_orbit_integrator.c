@@ -37,24 +37,12 @@ void nbReverseOrbit(mwvector* finalPos,
                     mwvector pos,
                     mwvector vel,
                     real tstop,
-                    real dt,
-                    mwbool shift)
-{	
-	float ax,ay,az,ax1,ay1,az1;
+                    real dt)
+{
     mwvector acc, v, x;
     real t;
     real dt_half = dt / 2.0;
     
-    FILE *fptr;
-    if (shift){
-	    if ((fptr = fopen("shift_r.txt","r")) == NULL){
-	        printf("Error! opening file");
-
-	        // Program exits if the file pointer returns NULL.
-	        exit(1);
-	    }
-	}
-
     // Set the initial conditions
     x = pos;
     v = vel;
@@ -62,22 +50,16 @@ void nbReverseOrbit(mwvector* finalPos,
 
     // Get the initial acceleration
     acc = nbExtAcceleration(pot, x);
+
     for (t = 0; t <= tstop; t += dt)
-    {	
-    	if(shift){
-        	fscanf(fptr,"%f %f %f %f %f %f", &ax, &ay, &az, &ax1, &ay1, &az1);}
-        else {ax = 0, ay = 0, az = 0, ax1 = 0, ay1 = 0, az1 = 0;}
-        printf("%f ", acc.x);printf("%f ", acc.y);printf("%f\n", acc.z);
+    {
         // Update the velocities and positions
         mw_incaddv_s(v, acc, dt_half);
         mw_incaddv_s(x, v, dt);
-        v.x -= dt_half*ax, v.y -= dt_half*ay, v.z -= dt_half*az;
-        x.x -= 0.5*dt*dt*ax, x.y -= 0.5*dt*dt*ay, x.z -= 0.5*dt*dt*az;
         
         // Compute the new acceleration
         acc = nbExtAcceleration(pot, x);
         
-        v.x -= dt_half*ax1, v.y -= dt_half*ay1, v.z -= dt_half*az1;
         mw_incaddv_s(v, acc, dt_half);
     }
     
@@ -87,6 +69,95 @@ void nbReverseOrbit(mwvector* finalPos,
     
     *finalPos = x;
     *finalVel = v;
+}
+
+void nbReverseOrbit_LMC(mwvector* finalPos,
+                    mwvector* finalVel,
+                    mwvector* LMCfinalPos,
+                    mwvector* LMCfinalVel,
+                    const Potential* pot,
+                    mwvector pos,
+                    mwvector vel,
+                    mwvector LMCpos,
+                    mwvector LMCvel,
+                    real tstop,
+                    real dt)
+{   
+    int steps = tstop/dt/10+1;
+    mwvector acc, v, x, mw_acc, LMC_acc, LMCv, LMCx, tmp;
+    mwvector mw_x = mw_vec(0, 0, 0);
+    mwvector array[steps];
+    real t, LMCmass = 449865.888;
+    real dt_half = dt / 2.0;
+    int i = 0;
+    // Set the initial conditions
+    x = pos;
+    v = vel;
+    LMCv = LMCvel;
+    LMCx = LMCpos;
+    mw_incnegv(v);
+    mw_incnegv(LMCv);
+
+
+    // Get the initial acceleration
+    mw_acc = pointAccel(mw_x, LMCx, LMCmass);
+    LMC_acc = nbExtAcceleration(pot, LMCx);
+    acc = nbExtAcceleration(pot, x);
+    tmp = pointAccel(x, LMCx, LMCmass);
+    mw_incaddv(acc, tmp);
+
+    // Shift the body
+    mw_incnegv(mw_acc);
+    mw_incaddv(LMC_acc, mw_acc);
+    mw_incaddv(acc, mw_acc);
+
+    for (t = 0; t <= tstop; t += dt)
+    {   
+        steps = t/dt;
+        if( steps % 10 == 0){ 
+            array[i] = mw_acc;
+            i++;
+        }
+
+        // Update the velocities and positions
+        mw_incaddv_s(v, acc, dt_half);
+        mw_incaddv_s(x, v, dt);
+        mw_incaddv_s(LMCv, LMC_acc, dt_half);
+        mw_incaddv_s(LMCx, LMCv, dt);
+        
+        // Compute the new acceleration
+        mw_acc = pointAccel(mw_x, LMCx, LMCmass);
+        LMC_acc = nbExtAcceleration(pot, LMCx);
+        acc = nbExtAcceleration(pot, x);
+        tmp = pointAccel(x, LMCx, LMCmass);
+        mw_incaddv(acc, tmp);
+
+        // Shift the body
+        mw_incnegv(mw_acc);
+        mw_incaddv(LMC_acc, mw_acc);
+        mw_incaddv(acc, mw_acc);
+        
+        mw_incaddv_s(v, acc, dt_half);
+        mw_incaddv_s(LMCv, LMC_acc, dt_half);
+
+    }
+
+    array[i] = mw_acc;
+    FILE *fp;
+    fp = fopen("shift.txt", "w");
+    for(int j=i; j>1; j--){
+        tmp = array[j];
+        fprintf(fp,"%f %f %f\n", tmp.x, tmp.y, tmp.z);
+    }
+    fclose(fp);
+    /* Report the final values (don't forget to reverse the velocities) */
+    mw_incnegv(v);
+    mw_incnegv(LMCv);
+    
+    *finalPos = x;
+    *finalVel = v;
+    *LMCfinalPos = LMCx;
+    *LMCfinalVel = LMCv;
 }
 
 void nbPrintReverseOrbit(mwvector* finalPos,
@@ -130,7 +201,7 @@ void nbPrintReverseOrbit(mwvector* finalPos,
         mw_incaddv_s(v, acc, dt_half);
         
         lbr = cartesianToLbr(x, DEFAULT_SUN_GC_DISTANCE);
-        fprintf(fp, "%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\n", X(lbr), Y(lbr), Z(lbr), X(v), Y(v), Z(v));
+        fprintf(fp, "%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\n", X(x), Y(x), Z(x), X(lbr), Y(lbr), Z(lbr), X(v), Y(v), Z(v));
     }
 
     fclose(fp);
@@ -148,7 +219,7 @@ void nbPrintReverseOrbit(mwvector* finalPos,
         mw_incaddv_s(v_for, acc, dt_half);
         
         lbr = cartesianToLbr(x_for, DEFAULT_SUN_GC_DISTANCE);
-        fprintf(fp, "%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\n", X(lbr), Y(lbr), Z(lbr), X(v_for), Y(v_for), Z(v_for));
+        fprintf(fp, "%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\t%.15f\n", X(x_for), Y(x_for), Z(x_for), X(lbr), Y(lbr), Z(lbr), X(v_for), Y(v_for), Z(v_for));
     }
     fclose(fp);
     
